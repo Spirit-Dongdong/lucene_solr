@@ -11,3 +11,6 @@ For Maven info, see dev-tools/maven/README.maven.
 For more information on how to contribute see:
 http://wiki.apache.org/lucene-java/HowToContribute
 http://wiki.apache.org/solr/HowToContribute
+
+
+It's an eclipse-build version for lucene_solr_4.5.1

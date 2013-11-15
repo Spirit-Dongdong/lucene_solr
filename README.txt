@@ -14,3 +14,4 @@ http://wiki.apache.org/solr/HowToContribute
 
 
 It's an eclipse-build version for lucene_solr_4.5.1
+会加入一些相关注释以及自己的一点优化

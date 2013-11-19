@@ -63,6 +63,8 @@ import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.ConstantScoreQuery;
+import org.apache.lucene.search.CountLimitingCollector;
+import org.apache.lucene.search.CountLimitingCollector.CountLimitingException;
 import org.apache.lucene.search.DocIdSet;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.Explanation;
@@ -1393,7 +1395,10 @@ public class SolrIndexSearcher extends IndexSearcher implements Closeable,SolrIn
     float maxScore;
     int[] ids;
     float[] scores;
+    
+    int lastDoc = -1;
 
+    int maxCountLimit = cmd.getMaxCountLimit();
     boolean needScores = (cmd.getFlags() & GET_SCORES) != 0;
     boolean terminateEarly = (cmd.getFlags() & TERMINATE_EARLY) == TERMINATE_EARLY;
     
@@ -1458,6 +1463,9 @@ public class SolrIndexSearcher extends IndexSearcher implements Closeable,SolrIn
         pf.postFilter.setLastDelegate(collector);
         collector = pf.postFilter;
       }
+      if (maxCountLimit > 0) {
+        collector = new CountLimitingCollector(maxCountLimit, collector, false, true);
+      }
 
       try {
         super.search(query, luceneFilter, collector);
@@ -1467,6 +1475,11 @@ public class SolrIndexSearcher extends IndexSearcher implements Closeable,SolrIn
       }
       catch( TimeLimitingCollector.TimeExceededException x ) {
         log.warn( "Query: " + query + "; " + x.getMessage() );
+        qr.setPartialResults(true);
+      }
+      catch (CountLimitingCollector.CountLimitingException x) {
+        log.warn( "Query: " + query + "; " + x.getMessage() );
+        lastDoc = x.getLastDoc();
         qr.setPartialResults(true);
       }
 
@@ -1498,6 +1511,9 @@ public class SolrIndexSearcher extends IndexSearcher implements Closeable,SolrIn
         pf.postFilter.setLastDelegate(collector);
         collector = pf.postFilter;
       }
+      if (maxCountLimit > 0) {
+        collector = new CountLimitingCollector(maxCountLimit, collector, false, true);
+      }
       try {
         super.search(query, luceneFilter, collector);
         if(collector instanceof DelegatingCollector) {
@@ -1508,8 +1524,21 @@ public class SolrIndexSearcher extends IndexSearcher implements Closeable,SolrIn
         log.warn( "Query: " + query + "; " + x.getMessage() );
         qr.setPartialResults(true);
       }
+      catch (CountLimitingCollector.CountLimitingException x) {
+//        log.warn( "Query: " + query + "; " + x.getMessage() );
+        lastDoc = x.getLastDoc();
+        qr.setPartialResults(true);
+      }
+      
+      
+      if (lastDoc == -1) { // not reach count limit
+        totalHits = topCollector.getTotalHits();
+      } else { //estimate totalHits
+        float ratio = maxDoc() / (float)lastDoc;
+        totalHits = (int) (ratio * maxCountLimit);
+      }
 
-      totalHits = topCollector.getTotalHits();
+//      totalHits = topCollector.getTotalHits();
       TopDocs topDocs = topCollector.topDocs(0, len);
       maxScore = totalHits>0 ? topDocs.getMaxScore() : 0.0f;
       nDocsReturned = topDocs.scoreDocs.length;
@@ -2163,6 +2192,8 @@ public class SolrIndexSearcher extends IndexSearcher implements Closeable,SolrIn
     //Issue 1726 start
     private ScoreDoc scoreDoc;
     
+    private int maxCountLimit;
+
     public ScoreDoc getScoreDoc()
     {
       return scoreDoc;
@@ -2267,6 +2298,13 @@ public class SolrIndexSearcher extends IndexSearcher implements Closeable,SolrIn
     public QueryCommand setTimeAllowed(long timeAllowed) {
       this.timeAllowed = timeAllowed;
       return this;
+    }
+    
+    public int getMaxCountLimit() {
+      return maxCountLimit;
+    }
+    public void setMaxCountLimit(int maxCountLimit) {
+      this.maxCountLimit = maxCountLimit;
     }
     
     public boolean isNeedDocSet() { return (flags & GET_DOCSET) != 0; }

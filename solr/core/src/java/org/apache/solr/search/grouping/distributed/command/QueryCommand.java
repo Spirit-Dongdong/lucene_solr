@@ -43,7 +43,7 @@ public class QueryCommand implements Command<QueryCommandResult> {
     private DocSet docSet;
     private Integer docsToCollect;
     private boolean needScores;
-
+    
     public Builder setSort(Sort sort) {
       this.sort = sort;
       return this;
